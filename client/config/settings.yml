@@ -1,0 +1,22 @@
+application:
+  name: test
+  contact: "邮箱等联系方式"
+  version: v1.0.0
+  secret: "123456"
+  serverUrl: "ws://localhost:3000"
+logger:
+  # 日志存放路径
+  path: files/logs
+  # 日志输出，file：文件，default：命令行，其他：命令行
+  stdout: '' #控制台日志，启用后，不输出到文件
+  # 日志等级, trace, debug, info, warn, error, fatal
+  level: trace
+  # 支持default、zap、logrus
+  type: default
+  # 单文件条数
+  cap: 100
+chain:
+  url: "链地址，如：ws://127.0.0.1:30303"
+  # second
+  timeout: 60
+  port: "30303"
