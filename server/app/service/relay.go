@@ -23,17 +23,19 @@ const (
 // NodeRelay contains the secret used to authenticate the communication between
 // the Ethereum node and this server
 type NodeRelay struct {
-	secret  string
-	logger  *logbase.Helper
-	channel *model.Channel
+	secret                string
+	logger                *logbase.Helper
+	channel               *model.Channel
+	emailLastNodeErrCache map[string]*time.Time
 }
 
 // NewRelay creates a new NodeRelay struct with required fields
 func NewRelay(channel *model.Channel, logger *logbase.Helper) *NodeRelay {
 	return &NodeRelay{
-		channel: channel,
-		secret:  config.ApplicationConfig.Secret,
-		logger:  logger,
+		channel:               channel,
+		secret:                config.ApplicationConfig.Secret,
+		logger:                logger,
+		emailLastNodeErrCache: make(map[string]*time.Time),
 	}
 }
 
@@ -69,15 +71,24 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 		if n.channel.Nodes[c.RemoteAddr().String()] != nil {
 			delete(n.channel.Nodes, c.RemoteAddr().String())
 		}
+
+		//send email
 		if n.channel.LoginIDs[c.RemoteAddr().String()] != "" {
-			content := "node: [" + n.channel.LoginIDs[c.RemoteAddr().String()] + "-" + c.RemoteAddr().String() + "] error, stop it"
-			err := emailutil.SendEmailDefault(fmt.Sprintf("%s-异常节点\n", time.Now().Format("2006-01-02 15:04:05")), content)
-			if err != nil {
-				n.logger.Trace("email content: ", content, " send error: ", err)
+			nodeErrLastTime := n.emailLastNodeErrCache[n.channel.LoginIDs[c.RemoteAddr().String()]]
+			//缓存异常节点为空，或者缓存异常节点不为空，且和当前时间相差大于1个小时，则发送邮件。
+			//然后更新缓存异常节点的时间
+			now := time.Now()
+			if nodeErrLastTime == nil || (nodeErrLastTime != nil && now.Sub(*nodeErrLastTime).Hours() > 1) {
+				n.emailLastNodeErrCache[n.channel.LoginIDs[c.RemoteAddr().String()]] = &now
+				content := "node: [" + n.channel.LoginIDs[c.RemoteAddr().String()] + "-" + c.RemoteAddr().String() + "] error, stop it"
+				err := emailutil.SendEmailDefault(fmt.Sprintf("%s-异常节点\n", time.Now().Format("2006-01-02 15:04:05")), content)
+				if err != nil {
+					n.logger.Error("email content: ", content, " send error: ", err)
+				} else {
+					n.logger.Info("email send success")
+				}
 			}
-			if err == nil {
-				n.logger.Trace("email send success")
-			}
+			//remove异常
 			delete(n.channel.LoginIDs, c.RemoteAddr().String())
 		}
 		err := c.Close()
