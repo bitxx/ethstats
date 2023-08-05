@@ -58,7 +58,7 @@ func (a *App) Start() {
 	defer func() {
 		a.close(conn, readTicker, latencyTicker)
 		// if not interrupt,restart the client
-		if !isInterrupt {
+		if r := recover(); r != nil || !isInterrupt {
 			time.Sleep(5 * time.Second)
 			a.Start()
 		}
@@ -112,6 +112,12 @@ func (a *App) Start() {
 }
 
 func (a *App) readLoop(conn *connutil.ConnWrapper) {
+	defer func() {
+		if r := recover(); r != nil {
+			return
+		}
+	}()
+
 	for {
 		blob := json.RawMessage{}
 		if err := conn.ReadJSON(&blob); err != nil {
