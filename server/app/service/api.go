@@ -105,7 +105,7 @@ func (h *hub) loop() {
 		case <-nodesMonitorTicker.C:
 			nodeCount := len(h.channel.Nodes)
 			nodeInfo := ""
-			for k, v := range h.channel.Nodes {
+			for _, v := range h.channel.Nodes {
 				//node info like this:
 				//{"Active":true,"PeerCount":500,"Pending":94,"GasPrice":1097000000000,"Syncing":false,"NodeInfo":{"Id":"test","Name":"test","Contact":"","Coinbase":"","Node":"","Net":"","Protocol":"","Api":"","ChainPort":"30303","OSPlatform":"amd64","OS":"darwin","Client":"v1.0.0"},"Block":{"Number":484645,"Hash":"0x0036faa4d9b83ec836ebbcd6a98699323c41bdcdedf8d96a21c6dd25b9c41b88","Difficulty":0,"Transactions":null,"Uncles":null,"Time":1690774181}}
 
@@ -119,8 +119,8 @@ func (h *hub) loop() {
 				heightTmp2 := strings.Replace(heightTmp1, "Number\":", "", -1)
 				latestHigh := strings.Replace(heightTmp2, ",", "", -1)
 
-				ip := strings.Replace(k, "[::1]", "127.0.0.1", -1)
-				nodeInfo = nodeInfo + "--节点ID：" + id + "，节点IP：" + ip + "，块高度：" + latestHigh + "\n"
+				//ip := strings.Replace(k, "[::1]", "127.0.0.1", -1)
+				nodeInfo = nodeInfo + "--节点ID：" + id + "，块高度：" + latestHigh + "\n"
 			}
 			content := "节点数量：" + strconv.Itoa(nodeCount) + "\n各节点块高度：\n" + nodeInfo
 			fmt.Println(content)
