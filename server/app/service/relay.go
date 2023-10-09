@@ -23,19 +23,19 @@ const (
 // NodeRelay contains the secret used to authenticate the communication between
 // the Ethereum node and this server
 type NodeRelay struct {
-	secret                string
-	logger                *logbase.Helper
-	channel               *model.Channel
-	emailLastNodeErrCache map[string]*time.Time
+	secret  string
+	logger  *logbase.Helper
+	channel *model.Channel
+	//emailLastNodeErrCache map[string]*time.Time
 }
 
 // NewRelay creates a new NodeRelay struct with required fields
 func NewRelay(channel *model.Channel, logger *logbase.Helper) *NodeRelay {
 	return &NodeRelay{
-		channel:               channel,
-		secret:                config.ApplicationConfig.Secret,
-		logger:                logger,
-		emailLastNodeErrCache: make(map[string]*time.Time),
+		channel: channel,
+		secret:  config.ApplicationConfig.Secret,
+		logger:  logger,
+		//emailLastNodeErrCache: make(map[string]*time.Time),
 	}
 }
 
@@ -75,29 +75,29 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 
 		//send email
 		if n.channel.LoginIDs[c.RemoteAddr().String()] != "" {
-			nodeErrLastTime := n.emailLastNodeErrCache[n.channel.LoginIDs[c.RemoteAddr().String()]]
+			/*nodeErrLastTime := n.emailLastNodeErrCache[n.channel.LoginIDs[c.RemoteAddr().String()]]
 			//cache time for delay send the same node email
 			now := time.Now()
 			if nodeErrLastTime == nil || (nodeErrLastTime != nil && now.Sub(*nodeErrLastTime).Hours() > 1) {
 				n.emailLastNodeErrCache[n.channel.LoginIDs[c.RemoteAddr().String()]] = &now
-				content := ""
-				switch errType {
-				case 1:
-					//ping error
-					content = "node: [" + n.channel.LoginIDs[c.RemoteAddr().String()] + "-" + c.RemoteAddr().String() + "] ping error"
-				case 2:
-					//node stopped
-					content = "node: [" + n.channel.LoginIDs[c.RemoteAddr().String()] + "-" + c.RemoteAddr().String() + "] process stopped"
-				}
-				if content != "" {
-					err := emailutil.SendEmailDefault(fmt.Sprintf("%s-node error\n", time.Now().Format("2006-01-02 15:04:05")), content)
-					if err != nil {
-						n.logger.Error("email content: ", content, " send error: ", err)
-					} else {
-						n.logger.Info("email send success")
-					}
-				}
+			}*/
 
+			content := ""
+			switch errType {
+			case 1:
+				//ping error
+				content = "node: [" + n.channel.LoginIDs[c.RemoteAddr().String()] + "-" + c.RemoteAddr().String() + "] ping error"
+			case 2:
+				//node stopped
+				content = "node: [" + n.channel.LoginIDs[c.RemoteAddr().String()] + "-" + c.RemoteAddr().String() + "] process stopped"
+			}
+			if content != "" {
+				err := emailutil.SendEmailDefault(fmt.Sprintf("%s-node error\n", time.Now().Format("2006-01-02 15:04:05")), content)
+				if err != nil {
+					n.logger.Error("email content: ", content, " send error: ", err)
+				} else {
+					n.logger.Info("email send success")
+				}
 			}
 
 			//remove error node
@@ -110,8 +110,10 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 		}
 		n.logger.Warnf("connection with node closed, there are %d connected nodes", len(n.channel.Nodes))
 	}(c)
-	pingErrCount := 0 // if ping error count big than 100, it means node is error,maybe node process stopped or network error
+
 	// Client loop
+	pingErrBeginTime := time.Now()
+	stopErrBeginTime := time.Now()
 	for {
 		_, content, err := c.ReadMessage()
 		if err != nil {
@@ -171,8 +173,9 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 			// before five seconds to authorize that node to sent reports
 			ping, err := parseNodePingMessage(msg)
 			if err != nil {
-				pingErrCount++
-				if pingErrCount >= 100 {
+				now := time.Now()
+				if now.Sub(pingErrBeginTime).Hours() > 1 { //after 1 hour notice
+					pingErrBeginTime = now
 					errType = 1
 					n.logger.Warnf("can't parse ping message sent by node[%s], error: %s", ping.ID, err)
 					return
@@ -181,9 +184,14 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 				continue
 			}
 			if ping.NodeStatus == "stopped" {
-				errType = 2
-				n.logger.Warnf("node[%s] process stopped", ping.ID)
-				return
+				now := time.Now()
+				if now.Sub(stopErrBeginTime).Hours() > 1 { //after 1 hour notice
+					stopErrBeginTime = now
+					errType = 2
+					n.logger.Warnf("node[%s] process stopped", ping.ID)
+					return
+				}
+				continue
 			}
 			sendError := ping.SendResponse(c)
 			if sendError != nil {
