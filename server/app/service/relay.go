@@ -32,10 +32,10 @@ type NodeRelay struct {
 // NewRelay creates a new NodeRelay struct with required fields
 func NewRelay(channel *model.Channel, logger *logbase.Helper) *NodeRelay {
 	return &NodeRelay{
-		channel:               channel,
-		secret:                config.ApplicationConfig.Secret,
-		logger:                logger,
-		emailLastNodeErrCache: make(map[string]*time.Time),
+		channel: channel,
+		secret:  config.ApplicationConfig.Secret,
+		logger:  logger,
+		//emailLastNodeErrCache: make(map[string]*time.Time),
 	}
 }
 
@@ -64,6 +64,7 @@ func (n *NodeRelay) HandleRequest(w http.ResponseWriter, r *http.Request) {
 
 // loop loops as long as the connection is alive and retrieves node packages
 func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
+	errType := 0 //1-ping error 2-node stopped
 	// Close connection if an unexpected error occurs and delete the node
 	// from the map of connected nodes...
 	defer func(c *connutil.ConnWrapper) {
@@ -75,20 +76,31 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 		//send email
 		if n.channel.LoginIDs[c.RemoteAddr().String()] != "" {
 			nodeErrLastTime := n.emailLastNodeErrCache[n.channel.LoginIDs[c.RemoteAddr().String()]]
-			//缓存异常节点为空，或者缓存异常节点不为空，且和当前时间相差大于1个小时，则发送邮件。
-			//然后更新缓存异常节点的时间
+			//cache time for delay send the same node email
 			now := time.Now()
 			if nodeErrLastTime == nil || (nodeErrLastTime != nil && now.Sub(*nodeErrLastTime).Hours() > 1) {
 				n.emailLastNodeErrCache[n.channel.LoginIDs[c.RemoteAddr().String()]] = &now
-				content := "node: [" + n.channel.LoginIDs[c.RemoteAddr().String()] + "-" + c.RemoteAddr().String() + "] error, stop it"
-				err := emailutil.SendEmailDefault(fmt.Sprintf("%s-异常节点\n", time.Now().Format("2006-01-02 15:04:05")), content)
+				content := ""
+				switch errType {
+				case 1:
+					//ping error
+					content = "node: [" + n.channel.LoginIDs[c.RemoteAddr().String()] + "-" + c.RemoteAddr().String() + "] ping error"
+				case 2:
+					//node stopped
+					content = "node: [" + n.channel.LoginIDs[c.RemoteAddr().String()] + "-" + c.RemoteAddr().String() + "] process stopped"
+				default:
+					return
+				}
+
+				err := emailutil.SendEmailDefault(fmt.Sprintf("%s-node error\n", time.Now().Format("2006-01-02 15:04:05")), content)
 				if err != nil {
 					n.logger.Error("email content: ", content, " send error: ", err)
 				} else {
 					n.logger.Info("email send success")
 				}
 			}
-			//remove异常
+
+			//remove error node
 			delete(n.channel.LoginIDs, c.RemoteAddr().String())
 		}
 		err := c.Close()
@@ -98,6 +110,7 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 		}
 		n.logger.Warnf("connection with node closed, there are %d connected nodes", len(n.channel.Nodes))
 	}(c)
+	pingErrCount := 0 // if ping error count big than 100, it means node is error,maybe node process stopped or network error
 	// Client loop
 	for {
 		_, content, err := c.ReadMessage()
@@ -158,7 +171,18 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 			// before five seconds to authorize that node to sent reports
 			ping, err := parseNodePingMessage(msg)
 			if err != nil {
-				n.logger.Warnf("can't parse ping message sent by node[%s], error: %s", ping.ID, err)
+				pingErrCount++
+				if pingErrCount >= 100 {
+					errType = 1
+					n.logger.Warnf("can't parse ping message sent by node[%s], error: %s", ping.ID, err)
+					return
+				}
+
+				continue
+			}
+			if ping.NodeStatus == "stopped" {
+				errType = 2
+				n.logger.Warnf("node[%s] process stopped", ping.ID)
 				return
 			}
 			sendError := ping.SendResponse(c)

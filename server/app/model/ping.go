@@ -6,8 +6,9 @@ import (
 
 // NodePing contains the last time the node is alive
 type NodePing struct {
-	ID   string `json:"id"`
-	Time string `json:"clientTime"`
+	ID         string `json:"id"`
+	Time       string `json:"clientTime"`
+	NodeStatus string `json:"nodeStatus"`
 }
 
 // SendResponse send the pong response to the node

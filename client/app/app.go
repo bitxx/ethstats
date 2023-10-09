@@ -1,15 +1,18 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"ethstats/client/app/model"
 	"ethstats/client/config"
 	"ethstats/common/util/connutil"
+	"fmt"
 	"github.com/bitxx/ethutil"
 	"github.com/bitxx/logger/logbase"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
 	"strconv"
@@ -124,15 +127,6 @@ func (a *App) readLoop(conn *connutil.ConnWrapper) {
 			a.logger.Warn("received and decode message error: ", err)
 			return
 		}
-		// If the network packet is a system ping, respond to it directly
-		var ping string
-		if err := json.Unmarshal(blob, &ping); err == nil && strings.HasPrefix(ping, "primus::ping::") {
-			if err := conn.WriteJSON(strings.Replace(ping, "ping", "pong", -1)); err != nil {
-				a.logger.Warn("failed to respond to system ping message: ", err)
-				return
-			}
-			continue
-		}
 		// Not a system ping, try to decode an actual state message
 		var msg map[string][]interface{}
 		if err := json.Unmarshal(blob, &msg); err != nil {
@@ -173,10 +167,22 @@ func (a *App) readLoop(conn *connutil.ConnWrapper) {
 func (a *App) reportLatency(conn *connutil.ConnWrapper) error {
 	start := time.Now()
 
+	// if is local node,detect the process
+	nodeStatus := "running" //nod
+	if strings.Contains(config.ChainConfig.Url, "127.0.0.1") {
+		_, err1 := RunCmd("ps axu |grep 'geth -' |grep -v grep") // 'geth -',use for query easy
+		_, err2 := RunCmd("ps axu |grep beacon-chain |grep -v grep")
+		_, err3 := RunCmd("ps axu |grep validator |grep -v grep")
+		if err1 != nil || err2 != nil || err3 != nil {
+			nodeStatus = "stopped"
+		}
+	}
+
 	ping := map[string][]interface{}{
 		"emit": {"node-ping", map[string]string{
 			"id":         config.ApplicationConfig.Name,
 			"clientTime": start.String(),
+			"nodeStatus": nodeStatus,
 		}},
 	}
 
@@ -273,4 +279,18 @@ func (a *App) close(conn *connutil.ConnWrapper, readTicker, latencyTicker *time.
 	if latencyTicker != nil {
 		_ = latencyTicker.Stop()
 	}
+}
+
+func RunCmd(cmdstring string) (string, error) {
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := exec.Command("/bin/sh", "-c", cmdstring)
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		fmt.Printf("err:%v\n", err)
+		return fmt.Sprintf("%s", stderr.String()), err
+	}
+	return fmt.Sprintf("%v", out.String()), nil
 }
