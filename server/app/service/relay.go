@@ -32,10 +32,10 @@ type NodeRelay struct {
 // NewRelay creates a new NodeRelay struct with required fields
 func NewRelay(channel *model.Channel, logger *logbase.Helper) *NodeRelay {
 	return &NodeRelay{
-		channel: channel,
-		secret:  config.ApplicationConfig.Secret,
-		logger:  logger,
-		//emailLastNodeErrCache: make(map[string]*time.Time),
+		channel:               channel,
+		secret:                config.ApplicationConfig.Secret,
+		logger:                logger,
+		emailLastNodeErrCache: make(map[string]*time.Time),
 	}
 }
 
@@ -88,16 +88,16 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 				case 2:
 					//node stopped
 					content = "node: [" + n.channel.LoginIDs[c.RemoteAddr().String()] + "-" + c.RemoteAddr().String() + "] process stopped"
-				default:
-					return
+				}
+				if content != "" {
+					err := emailutil.SendEmailDefault(fmt.Sprintf("%s-node error\n", time.Now().Format("2006-01-02 15:04:05")), content)
+					if err != nil {
+						n.logger.Error("email content: ", content, " send error: ", err)
+					} else {
+						n.logger.Info("email send success")
+					}
 				}
 
-				err := emailutil.SendEmailDefault(fmt.Sprintf("%s-node error\n", time.Now().Format("2006-01-02 15:04:05")), content)
-				if err != nil {
-					n.logger.Error("email content: ", content, " send error: ", err)
-				} else {
-					n.logger.Info("email send success")
-				}
 			}
 
 			//remove error node
