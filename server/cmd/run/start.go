@@ -131,7 +131,7 @@ func init() {
 	cmd.String(port, "", "prot")
 	cmd.String(version, "v1.0.0", "version")
 	cmd.String(secret, "", "secret")
-	cmd.String(logPath, "files/logs", "log path")
+	cmd.String(logPath, "", "log path")
 	cmd.String(logLevel, "trace", "log level")
 	cmd.String(logStdout, "default", "default,file")
 	cmd.String(logType, "default", "default、zap、logrus")
