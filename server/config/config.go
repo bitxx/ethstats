@@ -15,7 +15,6 @@ type Config struct {
 }
 
 func (e *Config) init() {
-	e.Logger.Setup()
 	e.runCallback()
 }
 

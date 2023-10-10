@@ -4,6 +4,7 @@ import (
 	"ethstats/server/app/model"
 	"ethstats/server/app/service"
 	"ethstats/server/config"
+	"github.com/bitxx/logger"
 	"github.com/bitxx/logger/logbase"
 	"net/http"
 )
@@ -22,7 +23,13 @@ func NewApp() *App {
 	}
 	return &App{
 		channel: channel,
-		logger:  logbase.NewHelper(logbase.DefaultLogger),
+		logger: logger.NewLogger(
+			logger.WithType(config.LoggerConfig.Type),
+			logger.WithPath(config.LoggerConfig.Path),
+			logger.WithLevel(config.LoggerConfig.Level),
+			logger.WithStdout(config.LoggerConfig.Stdout),
+			logger.WithCap(config.LoggerConfig.Cap),
+		),
 	}
 }
 

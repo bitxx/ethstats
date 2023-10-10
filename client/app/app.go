@@ -10,6 +10,7 @@ import (
 	"ethstats/common/util/connutil"
 	"fmt"
 	"github.com/bitxx/ethutil"
+	"github.com/bitxx/logger"
 	"github.com/bitxx/logger/logbase"
 	"os"
 	"os/exec"
@@ -42,7 +43,13 @@ func NewApp() *App {
 		node:    node,
 		readyCh: make(chan struct{}),
 		pongCh:  make(chan struct{}),
-		logger:  logbase.NewHelper(logbase.DefaultLogger),
+		logger: logger.NewLogger(
+			logger.WithType(config.LoggerConfig.Type),
+			logger.WithPath(config.LoggerConfig.Path),
+			logger.WithLevel(config.LoggerConfig.Level),
+			logger.WithStdout(config.LoggerConfig.Stdout),
+			logger.WithCap(config.LoggerConfig.Cap),
+		),
 	}
 }
 
@@ -197,7 +204,7 @@ func (a *App) reportLatency(conn *connutil.ConnWrapper) error {
 		// MsgPing timeout, abort
 		return errors.New("ping timed out")
 	}
-	latency := strconv.Itoa(int((time.Since(start) / time.Duration(2)).Nanoseconds() / 1000000))
+	latency := strconv.Itoa(int((time.Since(start) / time.Duration(1)).Nanoseconds() / 1000000))
 
 	// Send back the measured latency
 	a.logger.Trace("sending measured latency: ", latency)
