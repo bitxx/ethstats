@@ -69,6 +69,7 @@ func (a *App) Start() {
 		a.close(conn, readTicker, latencyTicker)
 		// if not interrupt,restart the client
 		if r := recover(); r != nil || !isInterrupt {
+			a.logger.Warn("conn recover error: ", r)
 			time.Sleep(5 * time.Second)
 			a.Start()
 		}
@@ -96,6 +97,7 @@ func (a *App) Start() {
 			}
 			err = conn.WriteJSON(login)
 			if err != nil {
+				a.logger.Warn("login request failed: ", err)
 				return
 			}
 
@@ -124,6 +126,7 @@ func (a *App) Start() {
 func (a *App) readLoop(conn *connutil.ConnWrapper) {
 	defer func() {
 		if r := recover(); r != nil {
+			a.logger.Warn("readLoop recover error: ", r)
 			return
 		}
 	}()
