@@ -20,22 +20,33 @@ const (
 	messageStats   string = "stats"
 )
 
+const (
+	ConnectError             = 1 //connect client error
+	ConnectTypeError         = 2 //client connect type error
+	AuthParseError           = 3 //parse auth data error
+	AuthLoginSecretError     = 4 //login secret error
+	AuthLoginSameNodeIDError = 5 //same node id error
+	AuthLoginRespError       = 6 //response login error
+	PingError                = 7 //ping error
+	PingStopError            = 8 //process stop
+)
+
 // NodeRelay contains the secret used to authenticate the communication between
 // the Ethereum node and this server
 type NodeRelay struct {
-	secret  string
-	logger  *logbase.Helper
-	channel *model.Channel
-	//emailLastNodeErrCache map[string]*time.Time
+	secret          string
+	logger          *logbase.Helper
+	channel         *model.Channel
+	emailDelayCache map[string]*time.Time
 }
 
 // NewRelay creates a new NodeRelay struct with required fields
 func NewRelay(channel *model.Channel, logger *logbase.Helper) *NodeRelay {
 	return &NodeRelay{
-		channel: channel,
-		secret:  config.ApplicationConfig.Secret,
-		logger:  logger,
-		//emailLastNodeErrCache: make(map[string]*time.Time),
+		channel:         channel,
+		secret:          config.ApplicationConfig.Secret,
+		logger:          logger,
+		emailDelayCache: make(map[string]*time.Time),
 	}
 }
 
@@ -64,7 +75,7 @@ func (n *NodeRelay) HandleRequest(w http.ResponseWriter, r *http.Request) {
 
 // loop loops as long as the connection is alive and retrieves node packages
 func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
-	errType := 0 //1-ping error 2-node stopped
+	errType := 0
 	// Close connection if an unexpected error occurs and delete the node
 	// from the map of connected nodes...
 	defer func(c *connutil.ConnWrapper) {
@@ -75,28 +86,37 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 
 		//send email
 		if n.channel.LoginIDs[c.RemoteAddr().String()] != "" {
-			/*nodeErrLastTime := n.emailLastNodeErrCache[n.channel.LoginIDs[c.RemoteAddr().String()]]
-			//cache time for delay send the same node email
-			now := time.Now()
-			if nodeErrLastTime == nil || (nodeErrLastTime != nil && now.Sub(*nodeErrLastTime).Hours() > 1) {
-				n.emailLastNodeErrCache[n.channel.LoginIDs[c.RemoteAddr().String()]] = &now
-			}*/
-
-			content := ""
+			content := "node: [" + n.channel.LoginIDs[c.RemoteAddr().String()] + "-" + c.RemoteAddr().String() + "] "
 			switch errType {
-			case 1:
-				//ping error
-				content = "node: [" + n.channel.LoginIDs[c.RemoteAddr().String()] + "-" + c.RemoteAddr().String() + "] ping error"
-			case 2:
-				//node stopped
-				content = "node: [" + n.channel.LoginIDs[c.RemoteAddr().String()] + "-" + c.RemoteAddr().String() + "] process stopped"
+			case ConnectError:
+				content = content + "connect error"
+			case ConnectTypeError:
+				content = content + "connect type error"
+			case AuthParseError:
+				content = content + "auth parse error"
+			case AuthLoginSecretError:
+				content = content + "auth login secret error"
+			case AuthLoginSameNodeIDError:
+				content = content + "auth login same node id error"
+			case AuthLoginRespError:
+				content = content + "auth login response error"
+			case PingError:
+				content = content + "ping error"
+			case PingStopError:
+				content = content + "process stopped"
 			}
-			if content != "" {
-				err := emailutil.SendEmailDefault(fmt.Sprintf("%s-node error\n", time.Now().Format("2006-01-02 15:04:05")), content)
-				if err != nil {
-					n.logger.Error("email content: ", content, " send error: ", err)
-				} else {
-					n.logger.Info("email send success")
+			if errType > 0 {
+				emailLatestTime := n.emailDelayCache[content]
+				//cache time for delay send the same node email
+				now := time.Now()
+				if emailLatestTime == nil || (emailLatestTime != nil && now.Sub(*emailLatestTime).Hours() > 1) {
+					n.emailDelayCache[content] = &now
+					err := emailutil.SendEmailDefault(fmt.Sprintf("%s-node error\n", time.Now().Format("2006-01-02 15:04:05")), content)
+					if err != nil {
+						n.logger.Error("email content: ", content, " send error: ", err)
+					} else {
+						n.logger.Info("email send success")
+					}
 				}
 			}
 
@@ -112,12 +132,10 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 	}(c)
 
 	// Client loop
-	pingErrBeginTime := time.Now()
-	stopErrBeginTime := time.Now()
 	for {
 		_, content, err := c.ReadMessage()
 		if err != nil {
-			//todo 有问题，c已被关闭
+			errType = ConnectError
 			n.logger.Errorf("error reading message from client, %s", err)
 			return
 		}
@@ -125,6 +143,7 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 		msg := model.Message{Content: content}
 		msgType, err := msg.GetType()
 		if err != nil {
+			errType = ConnectTypeError
 			n.logger.Warnf("can't get type of message sent by the node: %s", err)
 			return
 		}
@@ -132,6 +151,7 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 		case messageHello:
 			authMsg, parseError := parseAuthMessage(msg)
 			if parseError != nil {
+				errType = AuthParseError
 				n.logger.Warnf("can't parse authorization message sent by node[%s], error: %s", authMsg.ID, parseError)
 				loginErr := authMsg.SendLoginErrResponse(c, "login data parsing error")
 				if loginErr != nil {
@@ -142,6 +162,7 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 			}
 			// first check if the secret is correct
 			if authMsg.Secret != n.secret {
+				errType = AuthLoginSecretError
 				n.logger.Errorf("invalid secret from node %s, can't get stats", authMsg.ID)
 				loginErr := authMsg.SendLoginErrResponse(c, "authorization error,invalid secret")
 				if loginErr != nil {
@@ -153,6 +174,7 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 			//判断节点名称是否重复，遍历效率有点低，有时间了在考虑怎么优化，或者伙计们可以帮忙想个简单的法子
 			for k, v := range n.channel.LoginIDs {
 				if v == authMsg.ID && k != c.RemoteAddr().String() {
+					errType = AuthLoginSameNodeIDError
 					n.logger.Errorf("the id [%s] has login", authMsg.ID)
 					loginErr := authMsg.SendLoginErrResponse(c, "the login id has being exist,please change the id name")
 					if loginErr != nil {
@@ -165,6 +187,7 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 			}
 			sendError := authMsg.SendResponse(c)
 			if sendError != nil {
+				errType = AuthLoginRespError
 				n.logger.Errorf("error sending authorization response to node[%s], error: %s", authMsg.ID, sendError)
 				return
 			}
@@ -174,25 +197,15 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 			// before five seconds to authorize that node to sent reports
 			ping, err := parseNodePingMessage(msg)
 			if err != nil {
-				now := time.Now()
-				if now.Sub(pingErrBeginTime).Hours() > 1 { //after 1 hour notice
-					pingErrBeginTime = now
-					errType = 1
-					n.logger.Warnf("can't parse ping message sent by node[%s], error: %s", ping.ID, err)
-					return
-				}
+				errType = PingError
+				n.logger.Warnf("can't parse ping message sent by node[%s], error: %s", ping.ID, err)
+				return
 
-				continue
 			}
 			if ping.NodeStatus == "stopped" {
-				now := time.Now()
-				if now.Sub(stopErrBeginTime).Hours() > 1 { //after 1 hour notice
-					stopErrBeginTime = now
-					errType = 2
-					n.logger.Warnf("node[%s] process stopped", ping.ID)
-					return
-				}
-				continue
+				errType = PingStopError
+				n.logger.Warnf("node[%s] process stopped", ping.ID)
+				return
 			}
 			sendError := ping.SendResponse(c)
 			if sendError != nil {
