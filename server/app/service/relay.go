@@ -106,11 +106,12 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 				content = content + "process stopped"
 			}
 			if errType > 0 {
-				emailLatestTime := n.emailDelayCache[content]
+				flag := fmt.Sprintf("%s-%d", n.channel.LoginIDs[c.RemoteAddr().String()], errType)
+				emailLatestTime := n.emailDelayCache[flag]
 				//cache time for delay send the same node email
 				now := time.Now()
 				if emailLatestTime == nil || (emailLatestTime != nil && now.Sub(*emailLatestTime).Hours() > 1) {
-					n.emailDelayCache[content] = &now
+					n.emailDelayCache[flag] = &now
 					err := emailutil.SendEmailDefault(fmt.Sprintf("%s-node error\n", time.Now().Format("2006-01-02 15:04:05")), content)
 					if err != nil {
 						n.logger.Error("email content: ", content, " send error: ", err)
