@@ -117,6 +117,7 @@ func (n *NodeRelay) loop(c *connutil.ConnWrapper) {
 	for {
 		_, content, err := c.ReadMessage()
 		if err != nil {
+			//todo 有问题，c已被关闭
 			n.logger.Errorf("error reading message from client, %s", err)
 			return
 		}
