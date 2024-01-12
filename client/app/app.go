@@ -9,7 +9,7 @@ import (
 	"ethstats/client/config"
 	"ethstats/common/util/connutil"
 	"fmt"
-	"github.com/bitxx/ethutil"
+	"github.com/bitxx/evm-utils"
 	"github.com/bitxx/logger"
 	"github.com/bitxx/logger/logbase"
 	"os"
@@ -222,7 +222,7 @@ func (a *App) reportLatency(conn *connutil.ConnWrapper) error {
 }
 
 func (a *App) reportStats(conn *connutil.ConnWrapper) error {
-	ethClient := ethutil.NewEthClient(config.ChainConfig.Url, config.ChainConfig.Timeout)
+	ethClient := evmutils.NewEthClient(config.ChainConfig.Url, config.ChainConfig.Timeout)
 	chain, err := ethClient.Chain()
 	if err != nil {
 		return err
