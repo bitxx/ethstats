@@ -1,9 +1,9 @@
 module ethstats
 
-go 1.20
+go 1.21.5
 
 require (
-	github.com/bitxx/ethutil v1.0.0
+	github.com/bitxx/evm-utils v1.2.1
 	github.com/bitxx/load-config v1.5.1
 	github.com/bitxx/logger v1.6.1
 	github.com/ethereum/go-ethereum v1.12.0
@@ -28,6 +28,7 @@ require (
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-ole/go-ole v1.2.1 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/holiman/uint256 v1.2.2-0.20230321075855-87b91420868c // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -36,6 +37,7 @@ require (
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/storyicon/sigverify v1.1.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.5 // indirect
 	github.com/tklauser/numcpus v0.2.2 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
